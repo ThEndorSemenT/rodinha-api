@@ -3,6 +3,16 @@ import { NextResponse } from 'next/server';
 // Server-side API route that proxies Pinata public files endpoint and returns a simplified "tracks" list.
 // Requires PINATA_JWT environment variable to be set on the server (do NOT expose this to the client).
 export async function GET(req) {
+  const origin = req.headers.get("origin");
+  const allowedOrigins = [
+    "http://localhost:3000",
+    "https://rodinha.pt",
+    "https://rodinha.umaboaquestao.pt"
+  ];
+
+  // if your API should respond only to allowed origins:
+  const isAllowed = allowedOrigins.includes(origin);
+
   try {
     const url = new URL(req.url);
     const group = url.searchParams.get('group');
@@ -37,8 +47,23 @@ export async function GET(req) {
         url: `https://gateway.pinata.cloud/ipfs/${f.cid}`
       }));
 
-    return NextResponse.json({ tracks });
+    const response = NextResponse.json({ tracks });
+
+    response.headers.set("Access-Control-Allow-Origin", isAllowed ? origin : allowedOrigins.last);
+    response.headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+    response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    return response;
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
+}
+
+// Needed to handle browser preflight (OPTIONS) requests
+export async function OPTIONS() {
+  const res = new NextResponse(null, { status: 204 });
+  res.headers.set("Access-Control-Allow-Origin", "*");
+  res.headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  return res;
 }
