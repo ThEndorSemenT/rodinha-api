@@ -1,26 +1,87 @@
-# Deploy Next.js to Railway
+# Rodinha API
 
-This is a Next.js template which can be deployed to [Railway](https://railway.app) with zero configuration.
+A Next.js-based API server that serves as a gatekeeper and cache for the Rodinha gateway, providing access to music beats through Pinata IPFS integration.
 
-## Deploying to Railway
+## Features
 
-Railway automatically configures your Next.js application to run as a Node.js server (through `next start`). You can deploy to Railway using their CLI or GitHub integration.
+- **Pinata IPFS Integration:** Fetch and manage audio files stored on IPFS via Pinata
+- **CORS Support:** Configured to serve allowed origins
+- **Type-Safe:** Built with TypeScript strict mode
+- **Fast Development:** Turbo-powered dev server for rapid iteration
 
-Click the button below to begin:
+## Getting Started
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.com/new/template/yDom4a)
+### Prerequisites
 
-We highly recommend that you eject from the template after deployment to create a copy of the repo on your GitHub account.
+- Node.js 18+ 
+- npm or pnpm
 
-**Note:** You can also choose from a variety of [Next.js app templates](https://railway.app/templates?q=nextjs) created by the community.
+### Installation
 
-For more information, see our [deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying#self-hosting).
+```bash
+pnpm install
+```
+
+### Environment Variables
+
+Create a `.env.local` file in the root directory:
+
+```env
+PINATA_JWT=your_pinata_jwt_here
+```
+
+### Development
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+The server will be available at [http://localhost:3000](http://localhost:3000)
+
+### Production
+
+Build for production:
+
+```bash
+npm run build
+npm start
+```
+
+## API Endpoints
+
+### GET /api/pinata/tracks
+
+Fetches audio tracks from Pinata IPFS.
+
+**Query Parameters:**
+- `group` (string): Filter tracks by group
+
+**Response:**
+```json
+{
+  "tracks": [
+    {
+      "name": "track_name",
+      "artist": "artist_name",
+      "url": "https://gateway.pinata.cloud/ipfs/..."
+    }
+  ]
+}
+```
+
+**Allowed Origins:**
+- `http://localhost:3000`
+- `https://rodinha.pt`
+- `https://rodinha.umaboaquestao.pt`
+
+## Development Guidelines
+
+Refer to [AGENTS.md](./AGENTS.md) for detailed development guidelines, code style conventions, and common tasks.
 
 ## Learn More
 
-To learn more about deploying Next.js, take a look at the following resources:
-
-- [Next.js deployment documentation](https://nextjs.org/docs): Learn about Next.js features and API.
-- [Deploying Next.js to Railway](https://docs.railway.app/quick-start): A quickstart guide on deploying Next.js to Railway via GitHub, Railway CLI, or Docker.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [Next.js Documentation](https://nextjs.org/docs)
+- [Pinata Documentation](https://docs.pinata.cloud/)
+- [IPFS Documentation](https://docs.ipfs.tech/)
