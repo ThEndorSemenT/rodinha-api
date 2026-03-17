@@ -5,23 +5,24 @@ This document provides essential guidelines and commands for agents working on t
 ## Quick Reference
 
 **Tech Stack:**
-- Next.js 15.2.0 with React 19 RC
+- Next.js 15.5.13 with React 19.2.4
 - TypeScript 5 with strict mode enabled
 - Node.js runtime (ES2017 target)
 - Pinata IPFS API integration
+- **Package Manager:** pnpm (primary)
 
 ## Build, Lint & Test Commands
 
 ### Development
 ```bash
-npm run dev          # Start Next.js dev server with Turbo (http://localhost:3000)
 pnpm install         # Install dependencies (primary package manager)
+pnpm run dev         # Start Next.js dev server with Turbo (http://localhost:3000)
 ```
 
 ### Production
 ```bash
-npm run build         # Build for production (outputs to .next/)
-npm start            # Start production server
+pnpm run build       # Build for production (outputs to .next/)
+pnpm start           # Start production server
 ```
 
 ### Type Checking

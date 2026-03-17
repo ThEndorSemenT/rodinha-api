@@ -10,6 +10,10 @@
 !.yarn/releases
 !.yarn/versions
 
+# lock files (pnpm-lock.yaml is committed, others are generated per package manager)
+/package-lock.json
+/yarn.lock
+
 # testing
 /coverage
 
