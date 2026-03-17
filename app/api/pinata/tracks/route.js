@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 
+// Cache duration in seconds for browser caching (5 minutes by default)
+const CACHE_MAX_AGE = 300;
+
 // Server-side API route that proxies Pinata public files endpoint and returns a simplified "tracks" list.
 // Requires PINATA_JWT environment variable to be set on the server (do NOT expose this to the client).
 export async function GET(req) {
@@ -52,6 +55,7 @@ export async function GET(req) {
     response.headers.set("Access-Control-Allow-Origin", isAllowed ? origin : allowedOrigins.last);
     response.headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
     response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    response.headers.set("Cache-Control", `public, max-age=${CACHE_MAX_AGE}`);
 
     return response;
   } catch (err) {

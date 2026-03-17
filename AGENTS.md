@@ -92,6 +92,21 @@ npx tsc --noEmit     # Check TypeScript types without emitting
 - Include OPTIONS handler for preflight requests
 - Validate query params: `url.searchParams.get('param')`
 
+### Caching Strategy
+- Use `Cache-Control` headers to optimize browser and CDN caching
+- Define cache duration as a configurable constant (e.g., `CACHE_MAX_AGE`)
+- Example for 5-minute cache:
+  ```javascript
+  const CACHE_MAX_AGE = 300; // seconds
+  response.headers.set("Cache-Control", `public, max-age=${CACHE_MAX_AGE}`);
+  ```
+- Cache directives:
+  - `public`: Response can be cached by browsers, CDNs, and proxies
+  - `max-age=N`: Cache valid for N seconds before browser re-fetches
+  - `no-cache`: Browser must validate freshness before using cache
+  - `no-store`: Do not cache at all (use for sensitive/dynamic data)
+- Current implementation: Pinata tracks endpoint (`app/api/pinata/tracks/route.js`) caches for 5 minutes to reduce API load
+
 ### Comments & Documentation
 - Use comments to explain **why**, not what
 - Document server-side secrets: "do NOT expose this to the client"
