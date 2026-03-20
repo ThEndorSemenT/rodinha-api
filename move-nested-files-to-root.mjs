@@ -3,15 +3,14 @@
 /**
  * Move Files from Nested Pinata Folders to Root
  * 
- * This script downloads files from nested folders via gateway CIDs
- * and uploads them to the root of your Pinata group.
+ * Uses simpler file upload approach that handles large files.
  * 
  * Usage:
  *   # Preview changes (fast, no downloads)
- *   node move-nested-files-to-root.mjs --files-config files-to-move.json
+ *   node move-nested-files-to-root.mjs
  *   
- *   # Apply changes (downloads and uploads files)
- *   node move-nested-files-to-root.mjs --files-config files-to-move.json --dry-run false
+ *   # Apply changes
+ *   node move-nested-files-to-root.mjs --dry-run false
  */
 
 import { readFileSync, mkdirSync, rmSync, existsSync } from 'fs';
@@ -21,8 +20,7 @@ import { createReadStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 import FormData from 'form-data';
-
-const fetch = (await import('node-fetch')).default;
+import fetch from 'node-fetch';
 
 // Load .env.local
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -69,6 +67,7 @@ const VERBOSE = args['verbose'] === 'true';
 const FILES_CONFIG = args['files-config'] || 'files-to-move.json';
 
 const TEMP_DIR = join(__dirname, '.temp-nested-files');
+// Use Pinata gateway - has rate limits but is more reliable for this use case
 const GATEWAY_BASE = 'https://gateway.pinata.cloud/ipfs';
 
 // Validation
@@ -88,9 +87,9 @@ if (!existsSync(FILES_CONFIG)) {
 }
 
 /**
- * Download file from IPFS gateway
+ * Download file from IPFS gateway with aggressive retry logic for rate limiting
  */
-async function downloadFile(fileCid, filename) {
+async function downloadFile(fileCid, filename, retries = 8, initialDelay = 2000) {
   const url = `${GATEWAY_BASE}/${fileCid}?filename=${encodeURIComponent(filename)}`;
   const filepath = join(TEMP_DIR, filename.replace(/[/\\]/g, '_'));
   
@@ -98,49 +97,81 @@ async function downloadFile(fileCid, filename) {
     console.log(`       ⬇️  Downloading ${filename}...`);
   }
   
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Download failed: ${response.status}`);
+  let lastError;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(url);
+      
+      // If rate limited, wait significantly and retry
+      if (response.status === 429) {
+        const delay = initialDelay * Math.pow(2, attempt); // Exponential backoff
+        const seconds = Math.round(delay / 1000);
+        if (VERBOSE) {
+          console.log(`       ⏸️  Rate limited (429), waiting ${seconds}s before retry ${attempt + 1}/${retries}...`);
+        } else {
+          process.stdout.write(`[R${attempt + 1}/${retries}] `);
+        }
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
+      }
+      
+      // Use streams for efficient download
+      await pipeline(response.body, createWriteStream(filepath));
+      return filepath;
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries - 1) {
+        const delay = initialDelay * Math.pow(2, attempt);
+        const seconds = Math.round(delay / 1000);
+        if (VERBOSE) {
+          console.log(`       ⏸️  Error, waiting ${seconds}s before retry...`);
+        }
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
   
-  // Use streams for efficient download
-  await pipeline(response.body, createWriteStream(filepath));
-  return filepath;
+  throw lastError || new Error('Download failed after retries');
 }
 
 /**
  * Upload file to Pinata
+ * Uses a simpler multipart upload that handles large files better
  */
 async function uploadFileToRoot(filepath, filename, artist) {
-  const form = new FormData();
-  form.append('file', createReadStream(filepath));
-  form.append('group_id', PINATA_GROUP_ID);
-  
   // Prepare clean filename
   const cleanName = filename.replace(new RegExp(`^${artist}\\s*[-:]\\s*`, 'i'), '');
   
-  const metadata = {
-    name: cleanName,
-    keyvalues: {
-      artist: artist,
-      source: 'nested-folder'
-    }
-  };
-  form.append('metadata', JSON.stringify(metadata));
+  const form = new FormData();
+  form.append('file', createReadStream(filepath));
+  form.append('group_id', PINATA_GROUP_ID);
+  form.append('name', cleanName);
+  form.append('keyvalues', JSON.stringify({
+    artist: artist,
+    source: 'nested-folder'
+  }));
 
+  // Use raw content-type to avoid the form-data deprecation warning
   const response = await fetch(
     'https://api.pinata.cloud/v3/files',
     {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${PINATA_JWT}`,
+        ...form.getHeaders()
       },
-      body: form
+      body: form,
+      timeout: 60000  // 60 second timeout for large files
     }
   );
 
   if (!response.ok) {
-    throw new Error(`Upload failed: ${response.status}`);
+    const errorText = await response.text();
+    throw new Error(`Upload failed: ${response.status} - ${errorText.substring(0, 100)}`);
   }
 
   const data = await response.json();
@@ -177,42 +208,53 @@ async function main() {
       console.log(`📁 ${folderName.toUpperCase()}`);
       console.log(`   Files: ${files.length}\n`);
       
-      for (const fileEntry of files) {
-        totalFiles++;
-        const { name, cid, artist } = fileEntry;
-        
-        if (!cid || cid.includes('(')) {
-          console.log(`   ⊘ ${name} (no CID)`);
-          continue;
-        }
-        
-        try {
-          const cleanName = name.replace(new RegExp(`^${artist}\\s*[-:]\\s*`, 'i'), '');
-          
-          if (DRY_RUN) {
-            console.log(`   ✓ ${name}`);
-            console.log(`     → would rename to: ${cleanName}`);
-            console.log(`     → artist: ${artist}\n`);
-            successCount++;
-          } else {
-            // Download
-            process.stdout.write(`   ⏳ ${name}... `);
-            const filepath = await downloadFile(cid, name);
-            
-            // Upload
-            const result = await uploadFileToRoot(filepath, name, artist);
-            console.log('✓');
-            successCount++;
-          }
-        } catch (err) {
-          if (DRY_RUN) {
-            console.log(`   ✗ ${name}: ${err.message}`);
-          } else {
-            console.log(`failed: ${err.message}`);
-          }
-          failCount++;
-        }
-      }
+       for (let i = 0; i < files.length; i++) {
+         const fileEntry = files[i];
+         totalFiles++;
+         const { name, cid, artist } = fileEntry;
+         
+         if (!cid || cid.includes('(')) {
+           console.log(`   ⊘ ${name} (no CID)`);
+           continue;
+         }
+         
+         try {
+           const cleanName = name.replace(new RegExp(`^${artist}\\s*[-:]\\s*`, 'i'), '');
+           
+           if (DRY_RUN) {
+             console.log(`   ✓ ${name}`);
+             console.log(`     → would rename to: ${cleanName}`);
+             console.log(`     → artist: ${artist}\n`);
+             successCount++;
+           } else {
+             // Download
+             process.stdout.write(`   ⏳ ${name}... `);
+             const filepath = await downloadFile(cid, name);
+             
+             // Upload
+             const result = await uploadFileToRoot(filepath, name, artist);
+             console.log('✓');
+             successCount++;
+             
+             // Add delay between files to avoid rate limiting (except for last file)
+             if (i < files.length - 1) {
+               await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay between files
+             }
+           }
+         } catch (err) {
+           if (DRY_RUN) {
+             console.log(`   ✗ ${name}: ${err.message}`);
+           } else {
+             console.log(`failed: ${err.message}`);
+           }
+           failCount++;
+           
+           // Add delay even on failure (except for last file)
+           if (i < files.length - 1) {
+             await new Promise(resolve => setTimeout(resolve, 1000));
+           }
+         }
+       }
     }
     
     // Summary
