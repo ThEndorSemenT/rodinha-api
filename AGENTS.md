@@ -148,6 +148,26 @@ app/
 - **package.json**: Primary scripts (dev, build, start)
 - **.env.local**: Runtime secrets (not versioned)
 
+## Pinata File Organization
+
+The repository includes a script for organizing audio files in Pinata by artist:
+
+```bash
+# Preview changes (dry-run mode, no modifications)
+node organize-pinata-files.js --group-id <GROUP_ID>
+
+# Apply changes
+node organize-pinata-files.js --group-id <GROUP_ID> --dry-run false
+```
+
+**Features:**
+- Removes artist prefixes from filenames (e.g., `"Artist - Song.mp3"` → `"Song.mp3"`)
+- Adds artist metadata to files
+- Safe dry-run mode by default
+- No external dependencies
+
+See `docs/ORGANIZE_PINATA_README.md` for detailed documentation.
+
 ## Common Tasks
 
 **Add new API endpoint:**
